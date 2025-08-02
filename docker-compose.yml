@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS
+  postgres:
+    image: postgis/postgis:14-3.2
+    container_name: nyc_parking_db
+    environment:
+      POSTGRES_DB: nyc_parking
+      POSTGRES_USER: parking_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking_user -d nyc_parking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: nyc_parking_cache
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nyc_parking_api
+    environment:
+      DATABASE_URL: postgresql://parking_user:${DB_PASSWORD:-changeme}@postgres/nyc_parking
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEBUG: ${DEBUG:-false}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app/backend:ro
+    restart: unless-stopped
+
+  # Web dashboard (nginx)
+  web:
+    image: nginx:alpine
+    container_name: nyc_parking_web
+    volumes:
+      - ./web-dashboard:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Data pipeline (runs periodically)
+  data-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nyc_parking_pipeline
+    command: python -m data_pipeline.import_parking_data
+    environment:
+      DATABASE_URL: postgresql://parking_user:${DB_PASSWORD:-changeme}@postgres/nyc_parking
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data-pipeline:/app/data-pipeline:ro
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: nyc_parking_network

@@ -3,125 +3,374 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Real-time street parking navigation for NYC">
     <title>NYC Parking Navigator - Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://tile.openstreetmap.org">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin="" />
+    
     <style>
+        /* CSS Variables for theming */
+        :root {
+            --primary-color: #2196F3;
+            --success-color: #4CAF50;
+            --danger-color: #f44336;
+            --warning-color: #FFEB3B;
+            --info-color: #2196F3;
+            --dark-color: #333;
+            --light-color: #f5f5f5;
+            --border-radius: 4px;
+            --box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
         }
         
         #map {
             height: 70vh;
             width: 100%;
+            position: relative;
         }
         
         .control-panel {
             padding: 20px;
-            background: #f5f5f5;
+            background: var(--light-color);
             height: 30vh;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
         
+        /* Loading indicator */
+        #loader {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            z-index: 9999;
+            display: none;
+        }
+        
+        .loader-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Error messages */
+        .error-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--danger-color);
+            color: white;
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            z-index: 9998;
+            max-width: 300px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .error-message button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            float: right;
+            margin-left: 10px;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Status indicators */
         .status-indicator {
             display: inline-block;
             width: 20px;
             height: 20px;
             border-radius: 50%;
             margin-right: 10px;
+            vertical-align: middle;
         }
         
-        .status-green { background-color: #4CAF50; }
-        .status-red { background-color: #f44336; }
-        .status-blue { background-color: #2196F3; }
-        .status-yellow { background-color: #FFEB3B; }
+        .status-green { background-color: var(--success-color); }
+        .status-red { background-color: var(--danger-color); }
+        .status-blue { background-color: var(--info-color); }
+        .status-yellow { background-color: var(--warning-color); }
         
+        /* Segment info cards */
         .segment-info {
             margin: 10px 0;
-            padding: 10px;
+            padding: 15px;
             background: white;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .segment-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        /* Search box */
+        .search-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
         }
         
         .search-box {
-            margin-bottom: 20px;
+            flex: 1;
+            display: flex;
+            gap: 10px;
         }
         
         .search-box input {
-            width: 300px;
-            padding: 10px;
+            flex: 1;
+            min-width: 200px;
+            padding: 12px;
             font-size: 16px;
             border: 1px solid #ddd;
-            border-radius: 4px;
-        }        
-        .search-box button {
-            padding: 10px 20px;
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+        
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+        
+        button {
+            padding: 12px 20px;
             font-size: 16px;
-            background: #2196F3;
+            background: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: var(--border-radius);
             cursor: pointer;
-            margin-left: 10px;
+            transition: var(--transition);
+            white-space: nowrap;
         }
         
-        .search-box button:hover {
+        button:hover {
             background: #1976D2;
+            transform: translateY(-1px);
         }
         
+        button:active {
+            transform: translateY(0);
+        }
+        
+        /* Legend */
         .legend {
             position: absolute;
             top: 10px;
             right: 10px;
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
             padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
             z-index: 1000;
         }
         
+        .legend h4 {
+            margin: 0 0 10px 0;
+        }
+        
+        /* Time selector */
         .time-selector {
-            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
         
         .time-selector input {
-            padding: 5px;
+            padding: 8px;
             font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+        }
+        
+        /* Statistics panel */
+        #parkingStats {
+            background: white;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        #parkingStats h4 {
+            margin: 0 0 10px 0;
+        }
+        
+        .stat-item {
+            padding: 5px 0;
+        }
+        
+        /* Popup styling */
+        .parking-popup .leaflet-popup-content-wrapper {
+            border-radius: var(--border-radius);
+        }
+        
+        .popup-content {
+            min-width: 200px;
+        }
+        
+        .popup-status {
+            font-weight: bold;
+        }
+        
+        .popup-regulations {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            font-size: 14px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            #map {
+                height: 60vh;
+            }
+            
+            .control-panel {
+                height: 40vh;
+                padding: 15px;
+            }
+            
+            .legend {
+                display: none;
+            }
+            
+            .search-box input {
+                min-width: 150px;
+            }
+            
+            button {
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+        }
+        
+        /* Accessibility */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
+        /* Focus styles for keyboard navigation */
+        *:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
         }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    
-    <div class="legend">
-        <h4>Parking Status</h4>
-        <div><span class="status-indicator status-green"></span>Available</div>
-        <div><span class="status-indicator status-red"></span>No Parking</div>
-        <div><span class="status-indicator status-blue"></span>Metered</div>
-        <div><span class="status-indicator status-yellow"></span>Loading Zone</div>
+    <!-- Loading indicator -->
+    <div id="loader">
+        <div class="loader-spinner"></div>
+        <p>Loading parking data...</p>
     </div>
     
+    <!-- Map container -->
+    <div id="map" role="application" aria-label="NYC Parking Map"></div>
+    
+    <!-- Legend -->
+    <div class="legend" role="complementary" aria-label="Parking Status Legend">
+        <h4>Parking Status</h4>
+        <div><span class="status-indicator status-green" aria-hidden="true"></span>Available</div>
+        <div><span class="status-indicator status-red" aria-hidden="true"></span>No Parking</div>
+        <div><span class="status-indicator status-blue" aria-hidden="true"></span>Metered</div>
+        <div><span class="status-indicator status-yellow" aria-hidden="true"></span>Loading Zone</div>
+    </div>
+    
+    <!-- Control panel -->
     <div class="control-panel">
         <h2>NYC Parking Navigator Dashboard</h2>
         
-        <div class="search-box">
-            <input type="text" id="addressInput" placeholder="Enter address or click on map">
-            <button onclick="searchAddress()">Search</button>
-            <button onclick="useCurrentLocation()">Use My Location</button>
-            <button id="trackingButton" onclick="toggleTracking()" style="background: #4CAF50;">Follow My Location</button>
-        </div>        
-        <div class="time-selector">
-            <label>Check parking for: </label>
-            <input type="datetime-local" id="queryTime" />
-            <button onclick="updateParkingDisplay()">Update</button>
+        <div class="search-container">
+            <div class="search-box">
+                <label for="addressInput" class="sr-only">Search address</label>
+                <input type="text" 
+                       id="addressInput" 
+                       placeholder="Enter address or click on map"
+                       aria-label="Enter address to search">
+                <button onclick="searchAddress()" aria-label="Search for address">Search</button>
+            </div>
+            <button onclick="useCurrentLocation()" aria-label="Use current location">📍 My Location</button>
+            <button id="trackingButton" 
+                    onclick="toggleTracking()" 
+                    style="background: #4CAF50;"
+                    aria-label="Toggle location tracking">Follow My Location</button>
         </div>
         
-        <div id="segmentList"></div>
+        <div class="time-selector">
+            <label for="queryTime">Check parking for:</label>
+            <input type="datetime-local" 
+                   id="queryTime"
+                   aria-label="Select date and time for parking check">
+            <button onclick="updateParkingDisplay()" aria-label="Update parking display">Update</button>
+        </div>
+        
+        <div id="parkingStats" role="region" aria-label="Parking statistics"></div>
+        
+        <div id="segmentList" role="region" aria-label="Parking segments list"></div>
     </div>
     
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
     <script src="dashboard.js"></script>
 </body>
 </html>
