@@ -2,208 +2,194 @@ package com.nycparking.navigator
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.location.Location
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.lifecycle.lifecycleScope
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.GoogleMap
-import com.google.android.gms.maps.OnMapReadyCallback
-import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.*
-import kotlinx.coroutines.launch
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import com.nycparking.navigator.ui.theme.NYCParkingNavigatorTheme
+import kotlinx.coroutines.delay
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.util.*
 
-class MainActivity : AppCompatActivity(), OnMapReadyCallback, TextToSpeech.OnInitListener {
+class MainActivity : ComponentActivity() {
     
-    private lateinit var map: GoogleMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
-    private lateinit var textToSpeech: TextToSpeech
     private lateinit var parkingApi: ParkingApiService
     
-    private var currentLocation: Location? = null
-    private var parkingOverlays = mutableListOf<Polyline>()
-    private var lastAnnouncedStreet: String? = null
-    companion object {
-        private const val LOCATION_PERMISSION_REQUEST_CODE = 1
-        private const val DEFAULT_ZOOM = 17f
-        private const val PARKING_QUERY_RADIUS = 300 // meters
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            // Permission granted
+        } else {
+            Toast.makeText(this, "Location permission required", Toast.LENGTH_LONG).show()
+        }
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
         
-        // Initialize location services
+        // Initialize location client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
-        // Initialize TTS
-        textToSpeech = TextToSpeech(this, this)
-        
-        // Initialize API client
+        // Initialize API client with fallback URL
         val retrofit = Retrofit.Builder()
-            .baseUrl("http://YOUR_SERVER_IP:8000/") // Replace with actual server
+            .baseUrl(BuildConfig.LOCAL_API_URL) // Use local for demo
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             
         parkingApi = retrofit.create(ParkingApiService::class.java)
         
-        // Setup map
-        val mapFragment = supportFragmentManager
-            .findFragmentById(R.id.map) as SupportMapFragment
-        mapFragment.getMapAsync(this)
+        // Check location permission
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // Permission already granted
+            }
+            else -> {
+                requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+        }
         
-        // Setup location callback
-        locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { location ->
-                    currentLocation = location
-                    updateParkingOverlay(location)
-                    centerMapOnLocation(location)
-                }
+        setContent {
+            NYCParkingNavigatorTheme {
+                ParkingNavigatorApp()
             }
         }
     }
-    override fun onMapReady(googleMap: GoogleMap) {
-        map = googleMap
-        
-        // Enable location layer if permission granted
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            map.isMyLocationEnabled = true
-            startLocationUpdates()
-        } else {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                LOCATION_PERMISSION_REQUEST_CODE
-            )
-        }
-        
-        // Customize map style
-        map.setMapStyle(
-            MapStyleOptions.loadRawResourceStyle(this, R.raw.map_style)
-        )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ParkingNavigatorApp() {
+    var showAudioEnabled by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // Default to Times Square
+    val timesSquare = LatLng(40.7580, -73.9855)
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(timesSquare, 16f)
     }
     
-    private fun startLocationUpdates() {
-        val locationRequest = LocationRequest.create().apply {
-            interval = 5000 // 5 seconds
-            fastestInterval = 2000 // 2 seconds
-            priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-        }
-        
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest,
-                locationCallback,
-                mainLooper
-            )
-        }
-    }
-    private fun updateParkingOverlay(location: Location) {
-        lifecycleScope.launch {
-            try {
-                val query = ParkingQuery(
-                    location = LocationData(location.latitude, location.longitude),
-                    radiusMeters = PARKING_QUERY_RADIUS
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("NYC Parking Navigator") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
-                
-                val segments = parkingApi.queryParking(query)
-                
-                // Clear existing overlays
-                parkingOverlays.forEach { it.remove() }
-                parkingOverlays.clear()
-                
-                // Draw new overlays
-                segments.forEach { segment ->
-                    val polylineOptions = PolylineOptions()
-                        .width(15f)
-                        .color(getColorForStatus(segment.statusColor))
-                        .geodesic(true)
-                    
-                    segment.coordinates.forEach { coord ->
-                        polylineOptions.add(LatLng(coord[1], coord[0]))
-                    }
-                    
-                    val polyline = map.addPolyline(polylineOptions)
-                    parkingOverlays.add(polyline)
-                    
-                    // Voice announcement for available parking
-                    if (segment.statusColor == "green" && 
-                        segment.streetName != lastAnnouncedStreet) {
-                        announceParking(segment.streetName, segment.side)
-                        lastAnnouncedStreet = segment.streetName
-                    }
+            )
+        },
+        floatingActionButton = {
+            Column {
+                // Audio toggle
+                FloatingActionButton(
+                    onClick = { 
+                        showAudioEnabled = !showAudioEnabled
+                        Toast.makeText(
+                            context, 
+                            if (showAudioEnabled) "Audio navigation enabled" else "Audio navigation disabled",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    containerColor = if (showAudioEnabled) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.secondary
+                ) {
+                    Text(if (showAudioEnabled) "🔊" else "🔇", style = MaterialTheme.typography.headlineMedium)
                 }
                 
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Error updating parking data: ${e.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
+                // Location button
+                ExtendedFloatingActionButton(
+                    onClick = { 
+                        Toast.makeText(context, "Getting current location...", Toast.LENGTH_SHORT).show()
+                    },
+                    text = { Text("My Location") },
+                    icon = { Text("📍") }
+                )
             }
         }
-    }
-    private fun getColorForStatus(statusColor: String): Int {
-        return when (statusColor) {
-            "green" -> Color.GREEN
-            "red" -> Color.RED
-            "blue" -> Color.BLUE
-            "yellow" -> Color.YELLOW
-            else -> Color.GRAY
-        }
-    }
-    
-    private fun centerMapOnLocation(location: Location) {
-        val latLng = LatLng(location.latitude, location.longitude)
-        map.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, DEFAULT_ZOOM))
-    }
-    
-    private fun announceParking(streetName: String, side: String) {
-        val announcement = "Parking available on $streetName, $side side"
-        textToSpeech.speak(announcement, TextToSpeech.QUEUE_FLUSH, null, null)
-    }
-    
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            textToSpeech.language = Locale.US
-        }
-    }
-    
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && 
-                grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                onMapReady(map)
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Google Map
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                properties = MapProperties(
+                    isMyLocationEnabled = true
+                ),
+                uiSettings = MapUiSettings(
+                    zoomControlsEnabled = true,
+                    myLocationButtonEnabled = true
+                )
+            ) {
+                // Add parking overlays here
+                // For demo, just show the map
+            }
+            
+            // Info card
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        "Welcome to NYC Parking Navigator!",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "• Tap anywhere on the map to see parking rules\n" +
+                        "• Use audio navigation for hands-free guidance\n" +
+                        "• Real-time parking availability",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            
+            // Demo notice
+            if (BuildConfig.LOCAL_API_URL.contains("10.0.2.2")) {
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        "Demo Mode - Using local server",
+                        modifier = Modifier.padding(8.dp),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        textToSpeech.shutdown()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 }

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NYC Parking Navigator</string>
+    <string name="map_api_key">YOUR_MAPS_API_KEY</string>
+    
+    <!-- UI Strings -->
+    <string name="audio_enabled">Audio navigation enabled</string>
+    <string name="audio_disabled">Audio navigation disabled</string>
+    <string name="parking_available">Parking available</string>
+    <string name="no_parking">No parking</string>
+    <string name="metered_parking">Metered parking</string>
+    <string name="loading">Loading parking data…</string>
+    <string name="error_location">Unable to get location</string>
+    <string name="error_network">Network error. Please try again.</string>
+    
+    <!-- Features -->
+    <string name="favorite_saved">Favorite spot saved</string>
+    <string name="timer_set">Parking timer set</string>
+    <string name="report_submitted">Report submitted</string>
+    
+    <!-- Permissions -->
+    <string name="location_permission_required">Location permission is required for parking navigation</string>
+    <string name="grant_permission">Grant Permission</string>
+</resources>

@@ -1,42 +1,42 @@
 package com.nycparking.navigator
 
-import retrofit2.http.*
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Body
+import retrofit2.http.Query
 
-// Data classes
-data class LocationData(
+interface ParkingApiService {
+    @POST("api/v1/parking/query")
+    suspend fun queryParking(@Body request: ParkingQueryRequest): List<ParkingSegment>
+    
+    @GET("api/v1/parking/location/{lat}/{lon}")
+    suspend fun getParkingAtLocation(
+        @Query("lat") latitude: Double,
+        @Query("lon") longitude: Double,
+        @Query("radius") radius: Int = 200
+    ): List<ParkingSegment>
+}
+
+data class ParkingQueryRequest(
+    val location: Location,
+    val radius_meters: Int = 300
+)
+
+data class Location(
     val latitude: Double,
     val longitude: Double
 )
 
-data class ParkingQuery(
-    val location: LocationData,
-    val radiusMeters: Int = 500,
-    val queryTime: String? = null
-)
-
 data class ParkingSegment(
-    val segmentId: String,
-    val coordinates: List<List<Double>>,
-    val streetName: String,
+    val segment_id: String,
+    val street_name: String,
     val side: String,
-    val regulations: List<Map<String, Any>>,
-    val currentStatus: String,
-    val statusColor: String,
-    val nextChange: String?
+    val current_status: String,
+    val status_color: String,
+    val regulations: List<Regulation>,
+    val distance: Double
 )
 
-// API Service
-interface ParkingApiService {
-    @POST("parking/query")
-    suspend fun queryParking(@Body query: ParkingQuery): List<ParkingSegment>
-    
-    @GET("parking/location/{lat}/{lon}")
-    suspend fun getParkingAtLocation(
-        @Path("lat") lat: Double,
-        @Path("lon") lon: Double,
-        @Query("radius") radius: Int = 200
-    ): List<ParkingSegment>
-    
-    @GET("health")
-    suspend fun healthCheck(): Map<String, Any>
-}
+data class Regulation(
+    val description: String
+)

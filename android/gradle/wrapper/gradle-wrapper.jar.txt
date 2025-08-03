@@ -1,0 +1,15 @@
+# Gradle Wrapper JAR
+This file would normally contain the gradle-wrapper.jar binary.
+For the APK build to work, you'll need to:
+
+1. Download gradle-wrapper.jar from:
+   https://github.com/gradle/gradle/blob/master/gradle/wrapper/gradle-wrapper.jar
+   
+2. Place it in this directory (android/gradle/wrapper/)
+
+Or run this command from the android directory:
+```
+gradle wrapper
+```
+
+The wrapper is required for the build process.
