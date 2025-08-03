@@ -295,23 +295,220 @@
             }
         }
         
-        /* Accessibility */
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0,0,0,0);
-            white-space: nowrap;
-            border: 0;
+        /* New features styles */
+        .features-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
         }
         
-        /* Focus styles for keyboard navigation */
-        *:focus {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
+        .feature-card {
+            background: white;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        .feature-card h4 {
+            margin: 0 0 15px 0;
+            color: var(--dark-color);
+        }
+        
+        /* Community reports */
+        .report-icon {
+            font-size: 20px;
+            text-align: center;
+            line-height: 30px;
+        }
+        
+        .report-popup {
+            min-width: 200px;
+        }
+        
+        .report-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .report-form select,
+        .report-form textarea {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+        }
+        
+        /* Timer display */
+        #timerDisplay {
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+            color: var(--primary-color);
+            margin: 20px 0;
+        }
+        
+        .timer-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        /* Favorites */
+        .favorite-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: var(--light-color);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .favorite-item:hover {
+            transform: translateX(5px);
+            box-shadow: var(--box-shadow);
+        }
+        
+        .favorite-icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+        
+        .favorite-info {
+            flex: 1;
+        }
+        
+        .navigate-btn {
+            padding: 5px 15px;
+            font-size: 14px;
+        }
+        
+        /* Predictions */
+        .prediction-item {
+            margin: 10px 0;
+        }
+        
+        .prediction-chart {
+            height: 20px;
+            background: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+        
+        .prediction-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        /* Garages */
+        .garage-item {
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+        }
+        
+        .garage-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .garage-distance {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .garage-price {
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .garage-availability {
+            padding: 5px 10px;
+            border-radius: var(--border-radius);
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        
+        .garage-availability.available {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .garage-availability.limited {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        .garage-availability.full {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .feature-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            margin: 2px;
+            background: var(--light-color);
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: white;
+            padding: 15px 25px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000;
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(-50%) translateY(0);
+        }
+        
+        .notification-success {
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .notification-warning {
+            border-left: 4px solid var(--warning-color);
+        }
+        
+        /* Audio navigation toggle */
+        .audio-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+            z-index: 1000;
+            transition: var(--transition);
+        }
+        
+        .audio-toggle:hover {
+            transform: scale(1.1);
+        }
+        
+        .audio-toggle.active {
+            background: var(--success-color);
         }
     </style>
 </head>
@@ -365,7 +562,63 @@
         <div id="parkingStats" role="region" aria-label="Parking statistics"></div>
         
         <div id="segmentList" role="region" aria-label="Parking segments list"></div>
+        
+        <!-- New Features Panel -->
+        <div class="features-panel">
+            <!-- Community Reports -->
+            <div class="feature-card">
+                <h4>Community Reports</h4>
+                <div class="report-form">
+                    <select id="reportType">
+                        <option value="spot_available">🟢 Spot Available</option>
+                        <option value="spot_taken">🔴 Spot Taken</option>
+                        <option value="ticket_officer">👮 Enforcement Alert</option>
+                        <option value="construction">🚧 Construction</option>
+                    </select>
+                    <textarea id="reportMessage" placeholder="Add details..." rows="2"></textarea>
+                    <button onclick="submitReport()">Submit Report</button>
+                </div>
+                <div id="nearbyReports"></div>
+            </div>
+            
+            <!-- Parking Timer -->
+            <div class="feature-card">
+                <h4>Parking Timer</h4>
+                <div id="timerDisplay">--:--:--</div>
+                <div class="timer-controls">
+                    <button onclick="parkingTimer.startTimer(30, state.currentLocation)">30 min</button>
+                    <button onclick="parkingTimer.startTimer(60, state.currentLocation)">1 hour</button>
+                    <button onclick="parkingTimer.startTimer(120, state.currentLocation)">2 hours</button>
+                    <button onclick="parkingTimer.stopTimer()" style="background: #f44336;">Stop</button>
+                </div>
+            </div>
+            
+            <!-- Favorites -->
+            <div class="feature-card">
+                <h4>Favorite Spots</h4>
+                <button onclick="addCurrentLocationAsFavorite()">⭐ Save Current Location</button>
+                <div id="favoritesList"></div>
+            </div>
+            
+            <!-- Predictions -->
+            <div class="feature-card">
+                <h4>Parking Predictions</h4>
+                <input type="datetime-local" id="predictionTime" />
+                <button onclick="getPredictions()">Get Predictions</button>
+                <div id="predictionsList"></div>
+            </div>
+            
+            <!-- Nearby Garages -->
+            <div class="feature-card">
+                <h4>Parking Garages</h4>
+                <button onclick="garageComparison.loadNearbyGarages(state.currentLocation)">Refresh</button>
+                <div id="garagesList"></div>
+            </div>
+        </div>
     </div>
+    
+    <!-- Audio Navigation Toggle -->
+    <button class="audio-toggle" onclick="toggleAudioNavigation()" aria-label="Toggle audio navigation">🔊</button>
     
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
