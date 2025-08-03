@@ -26,6 +26,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- Destination Monitor Service -->
+        <service
+            android:name=".service.DestinationMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+        
+        <!-- Navigation Intent Handler -->
+        <receiver
+            android:name=".receiver.NavigationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="geo" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

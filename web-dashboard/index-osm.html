@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYC Parking Navigator - OSM Edition</title>
+    
+    <!-- Leaflet CSS for OpenStreetMap -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --success-color: #4CAF50;
+            --warning-color: #FF9800;
+            --danger-color: #F44336;
+            --info-color: #00BCD4;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        #map {
+            height: 70vh;
+            width: 100%;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .status-bar {
+            padding: 10px;
+            background: var(--primary-color);
+            color: white;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 4px;
+        }
+        
+        .parking-popup {
+            max-width: 300px;
+        }
+        
+        .parking-popup h4 {
+            margin: 0 0 10px 0;
+            color: var(--primary-color);
+        }
+        
+        .parking-rule {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .parking-free { background: #E8F5E9; color: #2E7D32; }
+        .parking-metered { background: #E3F2FD; color: #1565C0; }
+        .parking-restricted { background: #FFEBEE; color: #C62828; }
+        .parking-cleaning { background: #FFF3E0; color: #E65100; }
+        
+        .btn {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1976D2;
+        }
+        
+        .server-status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .status-connected {
+            background: #E8F5E9;
+            color: #2E7D32;
+        }
+        
+        .status-error {
+            background: #FFEBEE;
+            color: #C62828;
+        }
+        
+        @media (max-width: 768px) {
+            #map { height: 50vh; }
+            .legend { 
+                bottom: auto;
+                top: 70px;
+                right: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="status-bar">
+        NYC Parking Navigator - OpenStreetMap Edition
+    </div>
+    
+    <div id="map"></div>
+    
+    <div class="legend">
+        <h4>Parking Status</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4CAF50;"></div>
+            <span>Free Parking</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #2196F3;"></div>
+            <span>Metered</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #F44336;"></div>
+            <span>No Parking</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #FF9800;"></div>
+            <span>Street Cleaning</span>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <div id="serverStatus" class="server-status">
+            Connecting to server...
+        </div>
+        
+        <button class="btn btn-primary" onclick="getCurrentLocation()">
+            📍 My Location
+        </button>
+        
+        <button class="btn btn-primary" onclick="toggleTracking()">
+            🔄 Auto-Update
+        </button>
+        
+        <button class="btn btn-primary" onclick="downloadOfflineMap()">
+            💾 Download Offline Map
+        </button>
+        
+        <div id="stats" style="margin-top: 20px; font-size: 14px;">
+            Loading parking data...
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Configuration - Update this with your server IP
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:8000' 
+            : `http://${window.location.hostname}:8000`;
+        
+        // Initialize map
+        let map;
+        let userMarker;
+        let parkingMarkers = [];
+        let isTracking = false;
+        
+        // Initialize OpenStreetMap
+        function initMap() {
+            // Center on Times Square
+            map = L.map('map').setView([40.7580, -73.9855], 16);
+            
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Add click handler
+            map.on('click', onMapClick);
+            
+            // Check server connection
+            checkServerConnection();
+        }
+        
+        // Check server connection
+        async function checkServerConnection() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('serverStatus').className = 'server-status status-connected';
+                    document.getElementById('serverStatus').textContent = 
+                        `✅ Connected - ${data.total_signs.toLocaleString()} parking signs loaded`;
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (error) {
+                document.getElementById('serverStatus').className = 'server-status status-error';
+                document.getElementById('serverStatus').textContent = 
+                    `❌ Server not connected - Check ${API_URL}`;
+            }
+        }
+        
+        // Get parking data for a location
+        async function getParkingData(lat, lng, radius = 300) {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/parking/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location: { latitude: lat, longitude: lng },
+                        radius_meters: radius
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    displayParkingSigns(data);
+                    updateStats(data);
+                }
+            } catch (error) {
+                console.error('Error fetching parking data:', error);
+            }
+        }
+        
+        // Display parking signs on map
+        function displayParkingSigns(signs) {
+            // Clear existing markers
+            parkingMarkers.forEach(marker => map.removeLayer(marker));
+            parkingMarkers = [];
+            
+            // Group signs by location to avoid overlapping markers
+            const locationGroups = {};
+            
+            signs.forEach(sign => {
+                const key = `${sign.latitude.toFixed(5)},${sign.longitude.toFixed(5)}`;
+                if (!locationGroups[key]) {
+                    locationGroups[key] = [];
+                }
+                locationGroups[key].push(sign);
+            });
+            
+            // Create markers for each location
+            Object.entries(locationGroups).forEach(([key, signs]) => {
+                const [lat, lng] = key.split(',').map(Number);
+                const mainSign = signs[0];
+                
+                // Choose color based on most restrictive rule
+                const color = getSignColor(signs);
+                
+                // Create marker
+                const marker = L.circleMarker([lat, lng], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                });
+                
+                // Create popup content
+                const popupContent = createPopupContent(signs);
+                marker.bindPopup(popupContent);
+                
+                marker.addTo(map);
+                parkingMarkers.push(marker);
+            });
+        }
+        
+        // Get color for sign based on rules
+        function getSignColor(signs) {
+            // Priority: No Parking > Street Cleaning > Metered > Free
+            if (signs.some(s => s.status_color === 'red')) return '#F44336';
+            if (signs.some(s => s.status_color === 'orange')) return '#FF9800';
+            if (signs.some(s => s.status_color === 'blue')) return '#2196F3';
+            return '#4CAF50';
+        }
+        
+        // Create popup content
+        function createPopupContent(signs) {
+            const street = signs[0].street_name;
+            const from = signs[0].from_street || 'start';
+            const to = signs[0].to_street || 'end';
+            
+            let content = `<div class="parking-popup">`;
+            content += `<h4>${street}</h4>`;
+            content += `<small>${from} to ${to}</small><br><br>`;
+            
+            signs.forEach(sign => {
+                const cssClass = getCssClass(sign.status_color);
+                content += `<div class="parking-rule ${cssClass}">`;
+                content += `${sign.side} side: ${sign.description}`;
+                content += `</div>`;
+            });
+            
+            content += `</div>`;
+            return content;
+        }
+        
+        // Get CSS class for status
+        function getCssClass(color) {
+            const map = {
+                'green': 'parking-free',
+                'blue': 'parking-metered',
+                'red': 'parking-restricted',
+                'orange': 'parking-cleaning'
+            };
+            return map[color] || '';
+        }
+        
+        // Update statistics
+        function updateStats(signs) {
+            const total = signs.length;
+            const free = signs.filter(s => s.status_color === 'green').length;
+            const metered = signs.filter(s => s.status_color === 'blue').length;
+            const restricted = signs.filter(s => s.status_color === 'red').length;
+            
+            document.getElementById('stats').innerHTML = `
+                <strong>Parking in this area:</strong><br>
+                Total signs: ${total}<br>
+                Free: ${free} | Metered: ${metered} | Restricted: ${restricted}
+            `;
+        }
+        
+        // Handle map click
+        function onMapClick(e) {
+            const { lat, lng } = e.latlng;
+            getParkingData(lat, lng);
+            
+            // Add click marker
+            if (userMarker) map.removeLayer(userMarker);
+            userMarker = L.marker([lat, lng]).addTo(map);
+        }
+        
+        // Get current location
+        function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                alert('Geolocation not supported');
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const { latitude, longitude } = position.coords;
+                    map.setView([latitude, longitude], 17);
+                    
+                    // Add user marker
+                    if (userMarker) map.removeLayer(userMarker);
+                    userMarker = L.marker([latitude, longitude], {
+                        icon: L.divIcon({
+                            html: '📍',
+                            iconSize: [30, 30],
+                            className: 'user-location'
+                        })
+                    }).addTo(map);
+                    
+                    // Get parking data
+                    getParkingData(latitude, longitude);
+                },
+                error => {
+                    alert('Unable to get location');
+                }
+            );
+        }
+        
+        // Toggle tracking
+        function toggleTracking() {
+            isTracking = !isTracking;
+            if (isTracking) {
+                alert('Auto-update enabled');
+                // Would implement continuous tracking here
+            } else {
+                alert('Auto-update disabled');
+            }
+        }
+        
+        // Download offline map
+        function downloadOfflineMap() {
+            alert('Offline maps feature coming soon!\nFor now, map tiles are cached automatically.');
+        }
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+        });
+    </script>
+</body>
+</html>
